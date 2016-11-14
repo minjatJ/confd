@@ -14,7 +14,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/kelseyhightower/confd/backends"
 	"github.com/kelseyhightower/confd/log"
-	"github.com/kelseyhightower/confd/resource/template"
+	"github.com/minjatj/confd/resource/template"
 )
 
 var (

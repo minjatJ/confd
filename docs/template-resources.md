@@ -29,6 +29,9 @@ command is not managed by confd, and will block the configuration run until it e
 [template]
 src = "nginx.conf.tmpl"
 dest = "/etc/nginx/nginx.conf"
+subtemplates = [
+  "endpoint.conf.tmpl"
+]
 uid = 0
 gid = 0
 mode = "0644"

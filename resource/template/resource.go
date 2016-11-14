@@ -2,6 +2,7 @@ package template
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -46,6 +47,7 @@ type TemplateResource struct {
 	Prefix        string
 	ReloadCmd     string `toml:"reload_cmd"`
 	Src           string
+	SubTemplates  []string
 	StageFile     *os.File
 	Uid           int
 	funcMap       map[string]interface{}
@@ -83,6 +85,7 @@ func NewTemplateResource(path string, config Config) (*TemplateResource, error) 
 	tr.store = memkv.New()
 	tr.syncOnly = config.SyncOnly
 	addFuncs(tr.funcMap, tr.store.FuncMap)
+	addFuncs(tr.funcMap, tr.getFuncs())
 
 	if config.Prefix != "" {
 		tr.Prefix = config.Prefix
@@ -102,7 +105,43 @@ func NewTemplateResource(path string, config Config) (*TemplateResource, error) 
 	}
 
 	tr.Src = filepath.Join(config.TemplateDir, tr.Src)
+	for i, sub := range tr.SubTemplates {
+		tr.SubTemplates[i] = filepath.Join(config.TemplateDir, sub)
+	}
 	return &tr, nil
+}
+
+func (t *TemplateResource) getFuncs() map[string]interface{} {
+	fns := make(map[string]interface{})
+
+	fns["subTemplate"] = t.SubTemplate
+	// fns["basicTemplate"] = t.BasicTemplate
+	return fns
+}
+
+// SubTemplate retrieve a template from store and output the processed result
+func (t *TemplateResource) SubTemplate(templateKey, manifestKey string, extendedFuncs bool) (string, error) {
+	val, err := t.store.GetValue(templateKey)
+	if err != nil {
+		return "", err
+	}
+	var data interface{}
+	if manifestKey != "" {
+		manifestVal, err := t.store.GetValue(manifestKey)
+		if err != nil {
+			return "", err
+		}
+		if manifestVal != "" {
+			if err = json.Unmarshal([]byte(manifestVal), &data); err != nil {
+				return "", err
+			}
+		}
+	}
+	var funcs map[string]interface{}
+	if extendedFuncs {
+		funcs = t.funcMap
+	}
+	return parseTmpTemplate([]byte(val), data, funcs)
 }
 
 // setVars sets the Vars for template resource.
@@ -136,7 +175,7 @@ func (t *TemplateResource) createStageFile() error {
 	}
 
 	log.Debug("Compiling source template " + t.Src)
-	tmpl, err := template.New(path.Base(t.Src)).Funcs(t.funcMap).ParseFiles(t.Src)
+	tmpl, err := template.New(path.Base(t.Src)).Funcs(t.funcMap).ParseFiles(append(t.SubTemplates, t.Src)...)
 	if err != nil {
 		return fmt.Errorf("Unable to process template %s, %s", t.Src, err)
 	}

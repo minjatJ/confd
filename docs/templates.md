@@ -5,6 +5,13 @@ Templates are stored under the `/etc/confd/templates` directory by default.
 
 Templates are written in Go's [`text/template`](http://golang.org/pkg/text/template/).
 
+## Sub Templates
+
+Sub templates are stored under the `/etc/confd/templates` directory by default.
+They are listed in `subtemplates` configuration variable
+
+Sub templates are used a follow [`text/template/nested`](https://golang.org/pkg/text/template/#hdr-Nested_template_definitions).
+
 ## Template Functions
 
 ### map
@@ -297,6 +304,65 @@ Wrapper for [net.LookupIP](https://golang.org/pkg/net/#LookupIP) function. The w
 {{range lookupIP "some.host.local"}}
     server {{.}};
 {{end}}
+```
+
+### subTemplate
+
+Retrieve and process a template from store (First argument is used as template key).
+Retrieve some template data from a file in store (If second argument is not empty it will be used a data file key)
+Will use extended template functions if 3rd argument is true (Functions defined here)
+
+`/templates/database/mongo`
+
+```Text
+{
+  "hosts": [
+    {{range $index, $results := .Hosts}}
+      {{if gt $index 0}},{{end}}
+      "{{.}}"
+    {{end}}
+  ]
+}
+```
+
+`/services/prod/database/mongo`
+```JSON
+{
+  "Hosts": [
+    "127.0.0.1:7000",
+    "127.0.0.1:7001"
+  ]
+}
+```
+
+`/templates/other`
+
+```Text
+{
+  "nginx_domain": {{getv '/nginx/domain'}}
+}
+```
+
+```
+{
+  "mongo": {{subTemplate "/templates/database/mongo", "/services/prod/database/mongo", false}},
+  "other": {{subTemplate "/templates/other", "", true}}
+}
+```
+
+Output:
+```
+{
+  "mongo": {
+    "hosts": [
+      "127.0.0.1:7000",
+      "127.0.0.1:7001"
+    ]
+  },
+  "other": {
+    "nginx_domain": "example.com"
+  }
+}
 ```
 
 ## Example Usage

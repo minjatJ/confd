@@ -4,7 +4,9 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
+	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -112,4 +114,47 @@ func recursiveFindFiles(root string, pattern string) ([]string, error) {
 	} else {
 		return files, err
 	}
+}
+
+// parseTmpTemplate process a temporary template
+// It returns the processing result as a string or an error if any
+func parseTmpTemplate(rawTmpl []byte, tmplData interface{}, funcs map[string]interface{}) (string, error) {
+	// Create temp file (Will be use as template)
+	tmpInput, err := ioutil.TempFile("", "confd_subtemp")
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		tmpInput.Close()
+		os.Remove(tmpInput.Name())
+	}()
+
+	// Write template content to file
+	if _, err = tmpInput.Write(rawTmpl); err != nil {
+		return "", err
+	}
+	// Create new go template from temp file
+	tmpl, err := template.New(path.Base(tmpInput.Name())).Funcs(funcs).ParseFiles(tmpInput.Name())
+	if err != nil {
+		return "", err
+	}
+
+	// create TempFile for template output
+	temp, err := ioutil.TempFile("", "confd_subtemp")
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		temp.Close()
+		os.Remove(temp.Name())
+	}()
+	if err = tmpl.Execute(temp, tmplData); err != nil {
+		return "", err
+	}
+	// Read final output
+	data, err := ioutil.ReadFile(temp.Name())
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
